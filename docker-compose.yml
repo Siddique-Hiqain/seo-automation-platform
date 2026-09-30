@@ -34,11 +34,14 @@ services:
       - qdrant
 
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # Matches the qdrant-client version in backend/requirements.txt (1.19.x).
+    image: qdrant/qdrant:v1.19.0
     restart: unless-stopped
+    ports:
+      # Localhost only — reachable via SSH tunnel for the dashboard, never public.
+      - "127.0.0.1:6333:6333"
     volumes:
       - qdrant_storage:/qdrant/storage
-    # No `ports:` — only the app (same network) reaches it at qdrant:6333.
 
 volumes:
   qdrant_storage:

@@ -12,6 +12,7 @@ import {
   Eye,
   ExternalLink,
   FileText,
+  Globe,
   GripVertical,
   HelpCircle,
   Plus,
@@ -238,15 +239,31 @@ function Editor({ article }: { article: ArticleDetail }) {
                 Checking WordPress
               </Button>
             ) : integration.data ? (
-              <Button
-                icon={Send}
-                onClick={() => publish.mutate("draft")}
-                loading={publish.isPending}
-                disabled={dirty}
-                title={dirty ? "Save your changes before sending this article" : undefined}
-              >
-                {article.wp_post_id ? "Update WordPress draft" : "Send draft to WordPress"}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  icon={Send}
+                  onClick={() => publish.mutate("draft")}
+                  loading={publish.isPending}
+                  disabled={dirty}
+                  title={dirty ? "Save your changes before sending this article" : undefined}
+                >
+                  {article.wp_post_id ? "Update draft" : "Send draft"}
+                </Button>
+                <Button
+                  icon={Globe}
+                  onClick={() => {
+                    if (window.confirm("Publish this article live on your WordPress site now?")) {
+                      publish.mutate("publish");
+                    }
+                  }}
+                  loading={publish.isPending}
+                  disabled={dirty}
+                  title={dirty ? "Save your changes before publishing this article" : "Publish live to WordPress"}
+                >
+                  {article.wp_post_id ? "Publish live" : "Publish to WordPress"}
+                </Button>
+              </>
             ) : (
               <ButtonLink to={`/c/${article.website_id}/settings/integrations`} icon={Send}>
                 Connect WordPress
