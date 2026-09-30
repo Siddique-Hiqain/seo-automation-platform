@@ -60,6 +60,17 @@ export function rememberCompany(id: number) {
   listeners.forEach((l) => l());
 }
 
+export function forgetCompany(id: number) {
+  if (selected !== id) return;
+  selected = null;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* storage unavailable — keep in memory */
+  }
+  listeners.forEach((l) => l());
+}
+
 export function useRememberedCompany() {
   return useSyncExternalStore(
     (l) => {

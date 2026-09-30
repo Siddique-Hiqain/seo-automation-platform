@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -14,9 +14,15 @@ class WordPressIntegration(Base):
         ForeignKey("websites.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    admin_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     rest_url: Mapped[str] = mapped_column(String(512), nullable=False)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     application_password_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shared_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    seo_plugin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    permalink_structure: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    plugin_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    capabilities: Mapped[list | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="connected")
     connected_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

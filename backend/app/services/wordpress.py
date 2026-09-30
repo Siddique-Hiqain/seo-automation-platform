@@ -156,6 +156,7 @@ def render_faq(faq: list | None) -> str:
 def build_wordpress_payload(
     article: Article,
     target_status: str,
+    integration: WordPressIntegration | None = None,
 ) -> dict:
     content = render_markdown_or_html(article.content)
     faq_html = render_faq(article.faq)
@@ -171,6 +172,34 @@ def build_wordpress_payload(
         payload["slug"] = article.slug
     if article.meta_description:
         payload["excerpt"] = article.meta_description
+
+    if integration is not None and integration.shared_secret_encrypted:
+        payload["meta"] = {
+            "_seoa_article_id": article.id,
+            "_seoa_integration_id": integration.id,
+        }
+        seo_title = article.meta_title or article.title
+        seo_description = article.meta_description or ""
+        keyword_ideas = getattr(getattr(article, "topic", None), "keyword_ideas", None) or []
+        focus_keyword = keyword_ideas[0] if keyword_ideas else ""
+        if integration.seo_plugin == "yoast":
+            payload["yoast_meta"] = {
+                "yoast_wpseo_title": seo_title,
+                "yoast_wpseo_metadesc": seo_description,
+                "yoast_wpseo_focuskw": focus_keyword,
+            }
+        elif integration.seo_plugin == "rank_math":
+            payload["rank_math_meta_data"] = {
+                "title": seo_title,
+                "description": seo_description,
+                "focuskw": focus_keyword,
+            }
+        elif integration.seo_plugin == "aioseo":
+            payload["aioseo_meta_data"] = {
+                "title": seo_title,
+                "description": seo_description,
+                "focuskw": focus_keyword,
+            }
     return payload
 
 
@@ -200,7 +229,7 @@ def prepare_publish_target(db: Session, article_id: int, target_status: str) -> 
         raise WordPressConfigurationError("The WordPress integration credential has been revoked.")
     cipher = get_credential_cipher()
     password = cipher.decrypt(integration.application_password_encrypted)
-    payload = build_wordpress_payload(article, target_status)
+    payload = build_wordpress_payload(article, target_status, integration)
     target = PublishTarget(
         article_id=article.id,
         existing_post_id=article.wp_post_id,

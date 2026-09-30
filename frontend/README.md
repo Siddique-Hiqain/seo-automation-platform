@@ -14,14 +14,13 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-The backend has no CORS middleware, so the browser never calls it directly.
-Every request goes to `/backend/*` on the Vite server, which proxies it to
-`http://localhost:8000/*`. Change the target with `VITE_BACKEND_URL` (see `.env.example`).
+The backend has no CORS middleware, so the browser uses same-origin `/api/*`
+URLs. In development, Vite proxies those requests to `http://localhost:8000/api/*`.
+Change the target with `VITE_BACKEND_URL` (see `.env.example`).
 
 `npm run build` outputs static files to `dist/`. `npm run preview` serves that build
-with the same proxy. For a real deployment, put the app and the API behind one
-reverse proxy that forwards `/backend/` to the API, or set `VITE_API_BASE` to the
-API's URL once CORS is enabled there.
+with the same proxy. For a real deployment, put the app and API behind one
+reverse proxy that forwards `/api/` to FastAPI, as the root Docker setup does.
 
 ## What's in the app
 
@@ -45,7 +44,7 @@ shows **Retry setup**.
 | --- | --- |
 | Business switcher | `GET/POST /api/websites`, `GET /profile` for each business (names) |
 | Articles (`/c/:id/articles`) | `GET /api/websites/{id}/articles` |
-| Article editor (`/c/:id/articles/:articleId`) | `GET/PUT /articles/{id}` |
+| Article editor (`/c/:id/articles/:articleId`) | `GET/PUT /api/articles/{id}` |
 | Topic Research (`/c/:id/topics`) | `GET /topics`, `POST /topics/{topic_id}/write` |
 | Settings → Details (`/c/:id/settings/details`) | website info, `GET /profile` (name, industry, locations, summary) |
 | Settings → Brand | `GET /profile` (brand voice, services, audience, USPs, goals, themes, SEO opportunities) |

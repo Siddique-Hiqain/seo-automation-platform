@@ -1,20 +1,18 @@
-import httpx
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.website import Website
-from app.schemas.website import WebsiteCreate, WebsiteResponse
+from app.schemas.website import WebsiteCreate, WebsiteDeleteRequest, WebsiteResponse
 from app.models.website_page import WebsitePage
 from app.schemas.crawl import (
-    CrawlResponse,
     WebsiteCrawlResponse,
 )
 from app.services.crawler import (
     CrawlerError,
     UnsafeURLError,
-    crawl_page,
     crawl_website,
 )
 from app.models.content_chunk import ContentChunk
@@ -33,17 +31,8 @@ from app.schemas.search import (
 from app.services.semantic_search import (
     semantic_search,
 )
-from app.graphs.website_qa import (
-    WebsiteQAContext,
-    website_qa_graph,
-)
 from app.providers.llm.openrouter import (
     OpenRouterProvider,
-)
-from app.schemas.qa import (
-    AnswerSource,
-    WebsiteAnswerResponse,
-    WebsiteQuestionRequest,
 )
 from app.graphs.website_profile import (
     WebsiteProfileContext,
@@ -90,9 +79,11 @@ from app.models.article import Article
 
 
 router = APIRouter(
-    prefix="/api/websites",
+    prefix="/websites",
     tags=["Websites"],
 )
+
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -140,96 +131,47 @@ def list_websites(
 
     return websites
 
-@router.post(
-    "/{website_id}/crawl-homepage",
-    response_model=CrawlResponse,
-)
-def crawl_website_homepage(
+
+@router.delete("/{website_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_website(
     website_id: int,
+    payload: WebsiteDeleteRequest,
     db: Session = Depends(get_db),
 ):
-    website = db.get(
-        Website,
-        website_id,
-    )
-
+    website = db.get(Website, website_id)
     if website is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Website not found",
-        )
+        raise HTTPException(status_code=404, detail="Business not found.")
+    if payload.confirm_url != website.url:
+        raise HTTPException(status_code=409, detail="Confirmation URL does not match this business.")
 
-    website.status = "crawling"
-    db.commit()
-
+    # Qdrant is a shared collection. Delete only this website's vectors, and do
+    # not remove the MySQL record if vector cleanup could not be completed.
     try:
-        with httpx.Client(
-            timeout=10.0,
-            headers={
-                "User-Agent": "SEOAutomationBot/0.1"
-            },
-            follow_redirects=False,
-        ) as client:
-            result = crawl_page(
-                website.url,
-                client,
+        if qdrant_client.collection_exists(collection_name=settings.qdrant_collection):
+            qdrant_client.delete(
+                collection_name=settings.qdrant_collection,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="website_id",
+                                match=models.MatchValue(value=website_id),
+                            )
+                        ]
+                    )
+                ),
+                wait=True,
             )
-
-    except UnsafeURLError as exc:
-        website.status = "failed"
-        db.commit()
-
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Could not remove vectors for business %s", website_id)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            status_code=503,
+            detail="Could not remove the business search data. Nothing was deleted from the database; try again.",
         ) from exc
 
-    except CrawlerError as exc:
-        website.status = "failed"
-        db.commit()
-
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-
-    page = db.scalar(
-        select(WebsitePage).where(
-            WebsitePage.website_id == website.id,
-            WebsitePage.url == result.url,
-        )
-    )
-
-    if page is None:
-        page = WebsitePage(
-            website_id=website.id,
-            url=result.url,
-            title=result.title,
-            status_code=result.status_code,
-            content=result.content,
-        )
-
-        db.add(page)
-
-    else:
-        page.title = result.title
-        page.status_code = result.status_code
-        page.content = result.content
-
-    website.status = "crawled"
-
+    db.delete(website)
     db.commit()
-    db.refresh(page)
-
-    return CrawlResponse(
-        page_id=page.id,
-        website_id=website.id,
-        url=page.url,
-        title=page.title,
-        status_code=page.status_code,
-        characters=len(page.content),
-        preview=page.content[:500],
-    )
 
 @router.post(
     "/{website_id}/crawl",
@@ -545,69 +487,6 @@ def search_website(
         website_id=website_id,
         query=query,
         results=results,
-    )
-
-@router.post(
-    "/{website_id}/ask",
-    response_model=WebsiteAnswerResponse,
-)
-def ask_website(
-    website_id: int,
-    payload: WebsiteQuestionRequest,
-    db: Session = Depends(get_db),
-):
-    website = db.get(
-        Website,
-        website_id,
-    )
-
-    if website is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Website not found",
-        )
-
-    llm = OpenRouterProvider()
-
-    try:
-        result = website_qa_graph.invoke(
-            {
-                "website_id": website_id,
-                "question": payload.question,
-                "retrieved_chunks": [],
-                "context": "",
-                "answer": "",
-            },
-            context=WebsiteQAContext(
-                db=db,
-                llm=llm,
-            ),
-        )
-
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-
-    sources = [
-        AnswerSource(
-            page_id=item["page_id"],
-            chunk_id=item["chunk_id"],
-            title=item["title"],
-            url=item["url"],
-            score=item["score"],
-        )
-        for item in result[
-            "retrieved_chunks"
-        ]
-    ]
-
-    return WebsiteAnswerResponse(
-        website_id=website_id,
-        question=payload.question,
-        answer=result["answer"],
-        sources=sources,
     )
 
 @router.post(

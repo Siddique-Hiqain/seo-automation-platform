@@ -1,0 +1,6 @@
+# Force LF for files that run inside the Linux container. Windows CRLF endings would
+# break the shell entrypoint (`\r` on `#!/bin/sh` / `set -eu`) and confuse nginx/conf.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+docker/*.conf text eol=lf
+Dockerfile text eol=lf

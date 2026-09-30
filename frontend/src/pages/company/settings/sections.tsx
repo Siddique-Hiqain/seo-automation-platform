@@ -1,24 +1,30 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Award,
   Blocks,
   CalendarClock,
   CheckCircle2,
   Compass,
+  Download,
   ExternalLink,
   Flag,
   Frown,
   ImageIcon,
   Layers,
   Megaphone,
+  Trash2,
   TrendingUp,
   Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { Badge, buttonClass, ErrorState, Skeleton, Spinner, StatusBadge } from "../../../components/ui";
+import { Badge, Button, Dialog, buttonClass, ErrorState, Skeleton, Spinner, StatusBadge } from "../../../components/ui";
+import { api } from "../../../lib/api";
+import { forgetCompany } from "../../../lib/company";
 import { usePipeline } from "../../../lib/pipeline";
-import { errorMessage, useConnectWordPress, useDisconnectWordPress, useProfile, useWordPressIntegration } from "../../../lib/queries";
+import { errorMessage, useDeleteWebsite, useDisconnectWordPress, useProfile, useWordPressIntegration } from "../../../lib/queries";
+import { clearRunLog } from "../../../lib/runLog";
 import type { BusinessProfile } from "../../../lib/types";
 import { formatDate, toText } from "../../../lib/utils";
 import { useCompany } from "../CompanyLayout";
@@ -72,7 +78,8 @@ export function DetailsSettings() {
   const locations = asList(profile?.locations);
 
   return (
-    <SettingsPanel title="Organization Details" description="Your organization's identity, as our agents understood it from your website.">
+    <div className="space-y-6">
+      <SettingsPanel title="Organization Details" description="Your organization's identity, as our agents understood it from your website.">
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Organization name">{company.name}</Field>
         <Field label="Website">
@@ -125,7 +132,85 @@ export function DetailsSettings() {
           </>
         )}
       </div>
-    </SettingsPanel>
+      </SettingsPanel>
+      <DeleteBusinessSection processing={pipeline.running} />
+    </div>
+  );
+}
+
+function DeleteBusinessSection({ processing }: { processing: boolean }) {
+  const company = useCompany();
+  const navigate = useNavigate();
+  const remove = useDeleteWebsite(company.id);
+  const [open, setOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const confirmed = !processing && confirmation.trim() === company.website.url;
+
+  const close = () => {
+    if (remove.isPending) return;
+    setOpen(false);
+    setConfirmation("");
+    remove.reset();
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || remove.isPending) return;
+    try {
+      await remove.mutateAsync(company.website.url);
+      forgetCompany(company.id);
+      clearRunLog(company.id);
+      navigate("/", { replace: true });
+    } catch {
+      // The dialog displays the API error and stays open for another attempt.
+    }
+  };
+
+  return (
+    <>
+      <section className="rounded-2xl border border-rose-500/25 bg-surface p-5 sm:p-8">
+        <h2 className="text-base font-semibold text-rose-700 dark:text-rose-400">Delete business</h2>
+        <p className="mt-1 max-w-2xl text-sm text-ink-2">
+          Permanently remove this business and its data from Hiqain. Posts already published on WordPress will remain there.
+        </p>
+        {processing && <p className="mt-2 text-xs text-ink-3">Wait for the current setup task to finish before deleting.</p>}
+        <Button variant="danger" size="sm" icon={Trash2} className="mt-4" onClick={() => setOpen(true)} disabled={processing}>
+          Delete business
+        </Button>
+      </section>
+
+      <Dialog
+        open={open}
+        onClose={close}
+        title={`Delete ${company.name}?`}
+        description="This permanently deletes its crawled pages, search data, profile, topics, keywords, articles, and saved WordPress connection from Hiqain. This cannot be undone."
+      >
+        <form onSubmit={submit}>
+          <label htmlFor="confirm-business-url" className="block text-sm font-medium text-ink">
+            Type <span className="break-all font-semibold">{company.website.url}</span> to confirm
+          </label>
+          <input
+            id="confirm-business-url"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
+          />
+          <p className="mt-2 text-xs text-ink-3">Revoke Hiqain's Application Password in WordPress separately if you no longer need it.</p>
+          {remove.error && <p role="alert" className="mt-3 text-sm text-rose-600">{errorMessage(remove.error)}</p>}
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={close} disabled={remove.isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" icon={Trash2} loading={remove.isPending} disabled={!confirmed}>
+              Permanently delete
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
   );
 }
 
@@ -230,19 +315,11 @@ export function AssetsSettings() {
 export function IntegrationsSettings() {
   const company = useCompany();
   const integration = useWordPressIntegration(company.id);
-  const connect = useConnectWordPress(company.id);
   const disconnect = useDisconnectWordPress(company.id);
-  const [username, setUsername] = useState("");
-  const [applicationPassword, setApplicationPassword] = useState("");
-
-  const submitConnection = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      await connect.mutateAsync({ username: username.trim(), application_password: applicationPassword });
-      setApplicationPassword("");
-    } catch {
-      // The mutation error is shown next to the form.
-    }
+  const siteUrl = company.website.url.endsWith("/") ? company.website.url : `${company.website.url}/`;
+  const uploadUrl = new URL("wp-admin/plugin-install.php?tab=upload", siteUrl).toString();
+  const openWordPressAdmin = () => {
+    window.open(uploadUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -257,7 +334,7 @@ export function IntegrationsSettings() {
           <Badge tone="neutral">Not connected</Badge>
         )
       }
-      description="Connect with a WordPress Application Password once, then publish from the editor."
+      description="Install the Hiqain plugin once, connect it in WordPress, then publish from the editor."
     >
       {integration.isLoading ? (
         <div className="space-y-3">
@@ -320,40 +397,30 @@ export function IntegrationsSettings() {
             <Blocks className="size-5" />
           </span>
           <h3 className="mt-4 text-sm font-semibold text-ink">Connect {company.website.url}</h3>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-2">
-            In WordPress, open Users → Profile → Application Passwords. Create one named “Hiqain” and paste it below with your WordPress username. Do not enter your normal login password.
-          </p>
-          <form className="mt-5 max-w-lg space-y-4" onSubmit={submitConnection}>
-            <label className="block text-sm font-medium text-ink">
-              WordPress username
-              <input
-                type="text"
-                autoComplete="username"
-                required
-                maxLength={255}
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
-              />
-            </label>
-            <label className="block text-sm font-medium text-ink">
-              Application Password
-              <input
-                type="password"
-                autoComplete="new-password"
-                required
-                maxLength={255}
-                value={applicationPassword}
-                onChange={(event) => setApplicationPassword(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
-              />
-            </label>
-            {connect.error && <p role="alert" className="text-sm text-red-600">{errorMessage(connect.error)}</p>}
-            <button type="submit" disabled={connect.isPending} className={buttonClass("primary", "md")}>
-              {connect.isPending ? "Verifying…" : "Connect WordPress"}
-            </button>
-          </form>
-          <p className="mt-4 text-xs text-ink-3">The account needs permission to edit and publish posts. WordPress must be reachable from this server over HTTPS in production.</p>
+          <ol className="mt-3 max-w-2xl list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-2">
+            <li>Download the Hiqain plugin ZIP. A new tab will open the WordPress plugin upload page.</li>
+            <li>Log in on your WordPress site, choose the downloaded ZIP, click Install Now, then Activate.</li>
+            <li>In WordPress, open the Hiqain menu and click Connect. This page will update when the connection completes.</li>
+          </ol>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <a
+              href={api.wordPressPluginDownloadUrl()}
+              download="hiqain-wordpress-plugin.zip"
+              onClick={openWordPressAdmin}
+              className={buttonClass("primary", "md")}
+            >
+              <Download className="size-4" /> Download plugin and open WordPress
+            </a>
+            <a href={uploadUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "md")}>
+              Open WordPress upload <ExternalLink className="size-4" />
+            </a>
+          </div>
+          <div className="mt-4 max-w-2xl rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs leading-relaxed text-ink-2">
+            <p className="font-semibold text-ink">Hosted WordPress sites need one server setting</p>
+            <p className="mt-1">
+              Before clicking Connect in WordPress, ask your site administrator to set <code>SEOA_API_BASE</code> to the public HTTPS FastAPI URL and <code>SEOA_APP_URL</code> to this dashboard URL in <code>wp-config.php</code>. The supplied ZIP otherwise points to localhost. Exact examples are in WORDPRESS-SETUP.md.
+            </p>
+          </div>
         </div>
       )}
     </SettingsPanel>

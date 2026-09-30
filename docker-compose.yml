@@ -1,0 +1,44 @@
+# Production stack for the SEO automation platform.
+#
+#   app    - nginx + FastAPI (built from ./Dockerfile). Bound to 127.0.0.1 only;
+#            sPanel's reverse proxy terminates TLS and forwards HTTPS traffic here.
+#   qdrant - vector store, private to this compose network (no public port).
+#
+# MySQL is NOT managed here: the app talks to the MySQL you already run on the VPS
+# via DATABASE_URL in .env (see .env.example).
+#
+# Usage:  cp .env.example .env  &&  edit .env  &&  docker compose up -d --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: seo-automation-platform:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Qdrant lives in this network; this overrides whatever is in .env.
+      QDRANT_URL: http://qdrant:6333
+    ports:
+      # host:container. Only localhost is exposed so nothing bypasses sPanel/TLS.
+      # Point your sPanel proxy/vhost at http://127.0.0.1:8080.
+      - "127.0.0.1:8080:80"
+    extra_hosts:
+      # Lets DATABASE_URL reach MySQL on the VPS host via hostname
+      # "host.docker.internal" (requires MySQL to listen on the docker bridge/host
+      # gateway, not only 127.0.0.1 — see .env.example).
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    # No `ports:` — only the app (same network) reaches it at qdrant:6333.
+
+volumes:
+  qdrant_storage:

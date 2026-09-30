@@ -7,7 +7,6 @@ Revises: 7d2f9c1a4b6e
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "b4e8c0d3a12f"
@@ -23,12 +22,10 @@ def upgrade() -> None:
         "UPDATE wordpress_integrations SET status = 'disconnected', "
         "application_password_encrypted = NULL, disconnected_at = CURRENT_TIMESTAMP"
     )
-    op.drop_index("ix_wordpress_status_events_integration_id", table_name="wordpress_status_events")
-    op.drop_index("ix_wordpress_status_events_article_id", table_name="wordpress_status_events")
+    # Dropping each child table also removes its indexes and foreign keys.
+    # MySQL rejects dropping a foreign-key-supporting index while the table exists.
     op.drop_table("wordpress_status_events")
-    op.drop_index("ix_wordpress_request_nonces_integration_id", table_name="wordpress_request_nonces")
     op.drop_table("wordpress_request_nonces")
-    op.drop_index("ix_wordpress_connect_states_expires_at", table_name="wordpress_connect_states")
     op.drop_table("wordpress_connect_states")
 
     with op.batch_alter_table("wordpress_integrations") as batch_op:

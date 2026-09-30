@@ -1,0 +1,17 @@
+.git
+.gitignore
+.agents
+.codex
+
+**/.env
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/*.py[cod]
+
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+backend/tests
+
+*.log

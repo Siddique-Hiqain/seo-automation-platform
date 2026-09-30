@@ -12,6 +12,9 @@ from app.models.topic import Topic
 from app.models.keyword_metric import KeywordMetric
 from app.models.article import Article
 from app.models.wordpress_integration import WordPressIntegration
+from app.models.wordpress_connect_state import WordPressConnectState
+from app.models.wordpress_request_nonce import WordPressRequestNonce
+from app.models.wordpress_status_event import WordPressStatusEvent
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

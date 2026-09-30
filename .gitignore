@@ -1,0 +1,11 @@
+# Secrets / runtime env — never commit. The template (.env.example) IS committed.
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

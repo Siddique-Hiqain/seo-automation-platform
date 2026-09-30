@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from sqlalchemy import text
 from app.core.config import settings
 from app.db.database import engine
@@ -14,9 +14,13 @@ app = FastAPI(
     debug=settings.app_debug,
 )
 
-app.include_router(websites_router)
-app.include_router(articles_router)
-app.include_router(wordpress_router)
+# Routes defined in app/api all share the /api prefix.
+api_router = APIRouter(prefix="/api")
+api_router.include_router(websites_router)
+api_router.include_router(articles_router)
+api_router.include_router(wordpress_router)
+app.include_router(api_router)
+
 
 @app.get("/health")
 def health_check():

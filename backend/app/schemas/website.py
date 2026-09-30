@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
 
 class WebsiteCreate(BaseModel):
@@ -14,3 +14,7 @@ class WebsiteResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class WebsiteDeleteRequest(BaseModel):
+    confirm_url: str = Field(min_length=1, max_length=512)

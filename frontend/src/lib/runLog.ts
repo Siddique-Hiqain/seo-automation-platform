@@ -53,6 +53,21 @@ export function useRunLog(websiteId: number) {
 
 let autopilot: Record<number, StepKey | null> = {};
 
+export function clearRunLog(websiteId: number) {
+  const nextLog = { ...cache };
+  delete nextLog[websiteId];
+  cache = nextLog;
+  const nextSteps = { ...autopilot };
+  delete nextSteps[websiteId];
+  autopilot = nextSteps;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    /* storage unavailable — keep in memory */
+  }
+  listeners.forEach((l) => l());
+}
+
 export function setAutopilotStep(websiteId: number, step: StepKey | null) {
   autopilot = { ...autopilot, [websiteId]: step };
   listeners.forEach((l) => l());

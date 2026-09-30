@@ -17,9 +17,10 @@ import type {
   WordPressPublishResponse,
 } from "./types";
 
-// Defaults to the Vite proxy prefix. An empty value or "/" would send requests to the
-// Vite server itself (which answers with index.html), so those also fall back to it.
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, "") || "/backend";
+// Same-origin by default: paths like "/api/websites" and "/health" are sent as-is and,
+// in dev, forwarded to FastAPI by the Vite proxy (see vite.config.ts). Set VITE_API_BASE
+// to call a backend on another origin.
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, "") ?? "";
 
 export class ApiError extends Error {
   status: number;
@@ -95,6 +96,11 @@ export const api = {
 
   listWebsites: () => request<Website[]>("/api/websites"),
   createWebsite: (url: string) => post<Website>("/api/websites", { url }),
+  deleteWebsite: (id: number, confirmUrl: string) =>
+    request<void>(`/api/websites/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirm_url: confirmUrl }),
+    }),
 
   crawl: (id: number, maxPages: number) =>
     post<WebsiteCrawlResponse>(`/api/websites/${id}/crawl?max_pages=${maxPages}`),
@@ -111,22 +117,23 @@ export const api = {
 
   writeArticle: (topicId: number) => post<ArticleWriterResponse>(`/api/websites/topics/${topicId}/write`),
   listArticles: (id: number) => request<ArticleListResponse>(`/api/websites/${id}/articles`),
-  getArticle: (articleId: number) => request<ArticleDetail>(`/articles/${articleId}`),
+  getArticle: (articleId: number) => request<ArticleDetail>(`/api/articles/${articleId}`),
   updateArticle: (articleId: number, data: ArticleUpdateRequest) =>
-    request<{ message: string; article_id: number }>(`/articles/${articleId}`, {
+    request<{ message: string; article_id: number }>(`/api/articles/${articleId}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),
   getWordPressIntegration: (websiteId: number) =>
-    request<WordPressIntegration>(`/integrations/wordpress/websites/${websiteId}`),
+    request<WordPressIntegration>(`/api/integrations/wordpress/websites/${websiteId}`),
+  wordPressPluginDownloadUrl: () => `${API_BASE}/api/integrations/wordpress/plugin/download`,
   connectWordPress: (websiteId: number, credentials: WordPressCredentials) =>
-    request<WordPressIntegration>(`/integrations/wordpress/websites/${websiteId}`, {
+    request<WordPressIntegration>(`/api/integrations/wordpress/websites/${websiteId}`, {
       method: "PUT",
       body: JSON.stringify(credentials),
       cache: "no-store",
     }),
   disconnectWordPress: (websiteId: number) =>
-    request<void>(`/integrations/wordpress/websites/${websiteId}`, { method: "DELETE" }),
+    request<void>(`/api/integrations/wordpress/websites/${websiteId}`, { method: "DELETE" }),
   publishArticle: (articleId: number, status: "draft" | "publish") =>
-    post<WordPressPublishResponse>(`/articles/${articleId}/publish`, { status }),
+    post<WordPressPublishResponse>(`/api/articles/${articleId}/publish`, { status }),
 };

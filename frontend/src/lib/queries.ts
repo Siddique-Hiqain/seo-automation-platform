@@ -66,6 +66,7 @@ export function useWordPressIntegration(websiteId: number) {
   return useQuery({
     queryKey: keys.wordpressIntegration(websiteId),
     queryFn: () => fetchWordPressIntegration(websiteId),
+    refetchInterval: (query) => query.state.data ? false : 5000,
   });
 }
 
@@ -229,6 +230,21 @@ export function useUpdateArticle(articleId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.article(articleId) });
       qc.invalidateQueries({ queryKey: ["website"] });
+    },
+  });
+}
+
+export function useDeleteWebsite(websiteId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmUrl: string) => api.deleteWebsite(websiteId, confirmUrl),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["website", websiteId] });
+      qc.setQueryData(keys.websites, (websites: Awaited<ReturnType<typeof api.listWebsites>> | undefined) =>
+        websites?.filter((website) => website.id !== websiteId),
+      );
+      qc.invalidateQueries({ queryKey: keys.websites });
+      toast.success("Business deleted.");
     },
   });
 }
